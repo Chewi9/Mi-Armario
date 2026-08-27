@@ -2,8 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { supabase } from './supabase'
 import './App.css'
 
-const CATEGORIAS = ['Todas', 'Pantalones', 'Camisetas', 'Abrigos', 'Zapatos', 'Bolsos']
-
 function App() {
 
   // Autenticación
@@ -18,10 +16,14 @@ function App() {
   const [filtroActivo, setFiltroActivo] = useState('Todas')
   const [mostrarModal, setMostrarModal] = useState(false)
   const [cargando, setCargando] = useState(false)
-  const [nuevaPrenda, setNuevaPrenda] = useState({ nombre: '', categoria: 'Pantalones', archivo: null, preview: '' })
+  
+
+  const [nuevaPrenda, setNuevaPrenda] = useState({ nombre: '', categoria: '', archivo: null, preview: '' })
   const [prendaSeleccionada, setPrendaSeleccionada] = useState(null)
   const fileInputRef = useRef(null)
 
+
+  const categoriasUsuario = ['Todas', ...new Set(ropa.map(prenda => prenda.categoria))]
 
   // Sesión del usuario
   useEffect(() => {
@@ -40,16 +42,20 @@ function App() {
     if (usuario) obtenerRopa()
   }, [usuario])
 
+
+  // Obtener toda la ropa
   const obtenerRopa = async () => {
     const { data, error } = await supabase.from('ropa').select('*').order('created_at', { ascending: false })
     if (error) console.error("Error al cargar:", error)
     else setRopa(data)
   }
 
+  // Filtramos la ropa
   const ropaFiltrada = filtroActivo === 'Todas' 
     ? ropa 
     : ropa.filter(prenda => prenda.categoria === filtroActivo)
 
+  // Para subir la imagen de la ropa
   const manejarSubidaImagen = (e) => {
     const file = e.target.files[0]
     if (file) {
@@ -58,14 +64,14 @@ function App() {
     }
   }
 
-  // 2. Guardar en Supabase (Storage + Base de datos)
+  // Guardar la prenda en supabase
   const guardarPrenda = async (e) => {
     e.preventDefault()
     if (!nuevaPrenda.archivo) return alert("Por favor, sube una imagen")
     
     setCargando(true)
     try {
-      // A. Subir imagen al Bucket
+      // Subir imagen al Bucket
         const extension = nuevaPrenda.archivo.name.split('.').pop()
         const nombreArchivo = `${Date.now()}.${extension}`      
         const { error: errorStorage } = await supabase.storage
@@ -74,23 +80,23 @@ function App() {
 
       if (errorStorage) throw errorStorage
 
-      // B. Obtener URL pública de la imagen
+      // Obtener URL pública de la imagen
       const { data: { publicUrl } } = supabase.storage
         .from('imagenes_ropa')
         .getPublicUrl(nombreArchivo)
 
-      // C. Guardar datos en la tabla
+      // Guardar datos en la tabla
       const { error: errorDB } = await supabase.from('ropa').insert([
         { 
           nombre: nuevaPrenda.nombre, 
-          categoria: nuevaPrenda.categoria, 
+          categoria: nuevaPrenda.categoria.charAt(0).toUpperCase() + nuevaPrenda.categoria.slice(1).toLowerCase(),
           imagen_url: publicUrl 
         }
       ])
 
       if (errorDB) throw errorDB
 
-      // D. Refrescar la galería y cerrar modal
+      // Refrescar y cerrar modal
       await obtenerRopa()
       cerrarModal()
     } catch (error) {
@@ -100,12 +106,13 @@ function App() {
     }
   }
 
+  // Cerramos el modal de añadir prenda
   const cerrarModal = () => {
     setMostrarModal(false)
-    setNuevaPrenda({ nombre: '', categoria: 'Pantalones', archivo: null, preview: '' })
+    setNuevaPrenda({ nombre: '', categoria: '', archivo: null, preview: '' })
   }
 
-  // 3. Eliminar de Supabase
+  // Eliminar de Supabase
   const eliminarPrenda = async (id, imagen_url) => {
     // Extraemos el nombre del archivo de la URL para borrarlo del Storage
     const nombreArchivo = imagen_url.split('/').pop()
@@ -114,7 +121,7 @@ function App() {
     await supabase.from('ropa').delete().eq('id', id)
     
     setPrendaSeleccionada(null)
-    obtenerRopa() // Refrescar la galería
+    obtenerRopa() // Refrescar
   }
 
   // Autenticación
@@ -125,7 +132,7 @@ function App() {
       if (modoRegistro) {
         const { error } = await supabase.auth.signUp({email, password})
         if (error) throw error
-        alert("Cuenta creada con éxito. Ya puedes iniciar sesión.")
+        alert("Cuenta creada con éxito.")
         setModoRegistro(false)
       } else {
         const {error} = await supabase.auth.signInWithPassword({email, password})
@@ -179,19 +186,18 @@ function App() {
         <h2>Mi Armario</h2>
         <div className="topbar-actions">
           <span style={{ fontSize: '0.8rem', color: '#666' }}>{usuario.email}</span>
-          <button onClick={cerrarSesion} className="btn-cancelar" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>Salir</button>
+          <button onClick={cerrarSesion} className="btn-cancelar" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>Cerrar Sesión</button>
         </div>
       </header>
 
       <div className="header-actions">
-        <h1>Gallery</h1>
         <button className="btn-anadir-nuevo" onClick={() => setMostrarModal(true)}>
           Añadir nueva prenda
         </button>
       </div>
 
       <nav className="filtros">
-        {CATEGORIAS.map(categoria => (
+        {categoriasUsuario.map(categoria => (
           <button 
             key={categoria}
             className={`btn-filtro ${filtroActivo === categoria ? 'activo' : ''}`}
@@ -216,7 +222,7 @@ function App() {
         ))}
       </main>
 
-      {/* MODAL PARA AÑADIR */}
+      {/* MODAL PARA AÑADIR PRENDA*/}
       {mostrarModal && (
         <div className="modal-fondo">
           <div className="modal-contenido">
@@ -236,15 +242,20 @@ function App() {
 
               <div className="campo">
                 <label>Categoría:</label>
-                <select 
+                <input 
+                  type="text"
+                  required
+                  list="categorias-sugeridas"
+                  placeholder="Escribe una nueva o elige una"
                   value={nuevaPrenda.categoria}
                   onChange={(e) => setNuevaPrenda({...nuevaPrenda, categoria: e.target.value})}
                   disabled={cargando}
-                >
-                  {CATEGORIAS.filter(c => c !== 'Todas').map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
+                />
+                <datalist id="categorias-sugeridas">
+                  {categoriasUsuario.filter(c => c !== 'Todas').map(cat => (
+                    <option key={cat} value={cat} />
                   ))}
-                </select>
+                </datalist>
               </div>
 
               <div className="zona-subida-container">
@@ -285,7 +296,7 @@ function App() {
         </div>
       )}
 
-      {/* MODAL DE DETALLE */}
+      {/* MODAL DE DETALLE IMAGEN*/}
       {prendaSeleccionada && (
         <div className="modal-fondo">
           <div className="modal-contenido modal-detalle">
