@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import { supabase } from './supabase'
 import './App.css'
 
+const CATEGORIAS_COMUNES = ['Pantalones', 'Camisetas', 'Abrigos', 'Zapatos', 'Bolsos', 'Accesorios']
+
 function App() {
 
   // Autenticación
@@ -224,8 +226,8 @@ function App() {
 
       {/* MODAL PARA AÑADIR PRENDA*/}
       {mostrarModal && (
-        <div className="modal-fondo">
-          <div className="modal-contenido">
+        <div className="modal-fondo" onClick={cerrarModal}>
+          <div className="modal-contenido" onClick={(e) => e.stopPropagation()}>
             <h2>Añadir nueva prenda</h2>
             <form onSubmit={guardarPrenda} className="formulario">
               
@@ -246,7 +248,7 @@ function App() {
                   type="text"
                   required
                   list="categorias-sugeridas"
-                  placeholder="Escribe una nueva o elige una"
+                  placeholder="Escribe una nueva categoría"
                   value={nuevaPrenda.categoria}
                   onChange={(e) => setNuevaPrenda({...nuevaPrenda, categoria: e.target.value})}
                   disabled={cargando}
@@ -256,6 +258,29 @@ function App() {
                     <option key={cat} value={cat} />
                   ))}
                 </datalist>
+
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
+                  {CATEGORIAS_COMUNES.map(cat => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setNuevaPrenda({...nuevaPrenda, categoria: cat})}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '20px',
+                        border: '1px solid #ddd',
+                        background: nuevaPrenda.categoria.toLowerCase() === cat.toLowerCase() ? '#333' : '#f9f9f9',
+                        color: nuevaPrenda.categoria.toLowerCase() === cat.toLowerCase() ? '#fff' : '#555',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        transition: '0.2s'
+                      }}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                  </div>
+
               </div>
 
               <div className="zona-subida-container">
@@ -298,8 +323,8 @@ function App() {
 
       {/* MODAL DE DETALLE IMAGEN*/}
       {prendaSeleccionada && (
-        <div className="modal-fondo">
-          <div className="modal-contenido modal-detalle">
+        <div className="modal-fondo" onClick={() => setPrendaSeleccionada(null)}>
+          <div className="modal-contenido modal-detalle" onClick={(e) => e.stopPropagation()}>
             <div className="detalle-imagen">
               <img src={prendaSeleccionada.imagen_url} alt={prendaSeleccionada.nombre} />
             </div>
