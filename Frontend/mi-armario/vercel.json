@@ -1,4 +1,0 @@
-{
-  "buildCommand": "echo 'Saltando compilacion de Vercel'",
-  "outputDirectory": "dist"
-}
