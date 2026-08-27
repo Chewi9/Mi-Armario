@@ -1,24 +1,44 @@
 import { useState, useRef, useEffect } from 'react'
-import { supabase } from './supabase' // Importamos tu conexión
+import { supabase } from './supabase'
 import './App.css'
 
 const CATEGORIAS = ['Todas', 'Pantalones', 'Camisetas', 'Abrigos', 'Zapatos', 'Bolsos']
 
 function App() {
+
+  // Autenticación
+  const [usuario, setUsuario] = useState(null)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [modoRegistro, setModoRegistro] = useState(false)
+  const [cargandoAuth, setCargandoAuth] = useState(false)
+
+  // Armario
   const [ropa, setRopa] = useState([])
   const [filtroActivo, setFiltroActivo] = useState('Todas')
-  
   const [mostrarModal, setMostrarModal] = useState(false)
-  const [cargando, setCargando] = useState(false) // Para saber si estamos guardando
+  const [cargando, setCargando] = useState(false)
   const [nuevaPrenda, setNuevaPrenda] = useState({ nombre: '', categoria: 'Pantalones', archivo: null, preview: '' })
+  const [prendaSeleccionada, setPrendaSeleccionada] = useState(null)
   const fileInputRef = useRef(null)
 
-  const [prendaSeleccionada, setPrendaSeleccionada] = useState(null)
 
-  // 1. Cargar la ropa de Supabase al iniciar la app
+  // Sesión del usuario
   useEffect(() => {
-    obtenerRopa()
+    supabase.auth.getSession().then(({ data: {session } }) => {
+      setUsuario(session?.user ?? null)
+    })
+
+    const {data: {subscription }} = supabase.auth.onAuthStateChange((_event, session) => {
+      setUsuario(session?.user ?? null)
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
+
+  useEffect(() => {
+    if (usuario) obtenerRopa()
+  }, [usuario])
 
   const obtenerRopa = async () => {
     const { data, error } = await supabase.from('ropa').select('*').order('created_at', { ascending: false })
@@ -97,13 +117,69 @@ function App() {
     obtenerRopa() // Refrescar la galería
   }
 
+  // Autenticación
+  const manejarAuth = async (e) => {
+    e.preventDefault()
+    setCargandoAuth(true)
+    try {
+      if (modoRegistro) {
+        const { error } = await supabase.auth.signUp({email, password})
+        if (error) throw error
+        alert("Cuenta creada con éxito. Ya puedes iniciar sesión.")
+        setModoRegistro(false)
+      } else {
+        const {error} = await supabase.auth.signInWithPassword({email, password})
+        if (error) throw error
+      }
+    } catch(error) {
+      alert("Error: " + error.message)
+    } finally {
+      setCargandoAuth(false)
+    }
+  }
+
+  const cerrarSesion = async () => {
+    await supabase.auth.signOut()
+    setRopa([]) // Limpiamos ropa
+  }
+
+  // Pantalla login si no hay usuario
+  if (!usuario) {
+    return (
+      <div className="app-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <form onSubmit={manejarAuth} className="modal-contenido" style={{ width: '100%', maxWidth: '400px' }}>
+          <h2>{modoRegistro ? 'Crear cuenta' : 'Iniciar sesión'}</h2>
+          
+          <div className="campo">
+            <label>Email:</label>
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} disabled={cargandoAuth} />
+          </div>
+          
+          <div className="campo">
+            <label>Contraseña:</label>
+            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} disabled={cargandoAuth} minLength="6" />
+          </div>
+
+          <button type="submit" className="btn-guardar" style={{ width: '100%', marginTop: '15px' }} disabled={cargandoAuth}>
+            {cargandoAuth ? 'Cargando...' : (modoRegistro ? 'Registrarse' : 'Entrar')}
+          </button>
+          
+          <p style={{ textAlign: 'center', marginTop: '15px', cursor: 'pointer', color: '#666' }} onClick={() => setModoRegistro(!modoRegistro)}>
+            {modoRegistro ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate'}
+          </p>
+        </form>
+      </div>
+    )
+  }
+
+  // Pantalla principal
   return (
     <div className="app-container">
       <header className="topbar">
         <h2>Mi Armario</h2>
         <div className="topbar-actions">
-          <span className="icon-bell">🔔</span>
-          <div className="user-avatar"></div>
+          <span style={{ fontSize: '0.8rem', color: '#666' }}>{usuario.email}</span>
+          <button onClick={cerrarSesion} className="btn-cancelar" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>Salir</button>
         </div>
       </header>
 
